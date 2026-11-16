@@ -1,0 +1,120 @@
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract MemeToken is ERC20 {
+    constructor(
+        string memory name,
+        string memory symbol,
+        uint256 supply,
+        address creator
+    ) ERC20(name, symbol) {
+        _mint(creator, supply * 10 ** decimals());
+    }
+}
+
+contract AIMemeLaunchpad is Ownable {
+
+    struct MemeProject {
+        address creator;
+        address token;
+        string name;
+        string symbol;
+        string description;
+        uint256 aiScore;
+        bool analyzed;
+        bool launched;
+    }
+
+    uint256 public projectCount;
+
+    mapping(uint256 => MemeProject) public projects;
+
+    event ProjectCreated(
+        uint256 indexed id,
+        address creator,
+        string name
+    );
+
+    event AIAnalysisUpdated(
+        uint256 indexed id,
+        uint256 score
+    );
+
+    event TokenLaunched(
+        uint256 indexed id,
+        address token
+    );
+
+    constructor() Ownable(msg.sender) {}
+
+    // Create meme coin project
+    function createProject(
+        string memory name,
+        string memory symbol,
+        string memory description
+    ) external {
+        projectCount++;
+
+        projects[projectCount] = MemeProject({
+            creator: msg.sender,
+            token: address(0),
+            name: name,
+            symbol: symbol,
+            description: description,
+            aiScore: 0,
+            analyzed: false,
+            launched: false
+        });
+
+        emit ProjectCreated(
+            projectCount,
+            msg.sender,
+            name
+        );
+    }
+
+    // AI oracle submits analysis
+    function submitAIAnalysis(
+        uint256 id,
+        uint256 score
+    ) external onlyOwner {
+        require(id > 0 && id <= projectCount, "Invalid project");
+        require(score <= 100, "Invalid score");
+        require(!projects[id].launched, "Already launched");
+
+        projects[id].aiScore = score;
+        projects[id].analyzed = true;
+
+        emit AIAnalysisUpdated(id, score);
+    }
+
+    // Launch meme token
+    function launchToken(
+        uint256 id,
+        uint256 supply
+    ) external {
+        MemeProject storage project = projects[id];
+
+        require(project.creator == msg.sender, "Not creator");
+        require(project.analyzed, "AI analysis required");
+        require(!project.launched, "Already launched");
+        require(project.aiScore >= 50, "Low AI score");
+        require(supply > 0, "Invalid supply");
+
+        MemeToken token = new MemeToken(
+            project.name,
+            project.symbol,
+            supply,
+            msg.sender
+        );
+
+        project.token = address(token);
+        project.launched = true;
+
+        emit TokenLaunched(id, address(token));
+    }
+}
